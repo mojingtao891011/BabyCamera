@@ -7,6 +7,17 @@
 //
 
 #import "AppDelegate.h"
+#import <ShareSDK/ShareSDK.h>
+#import <TencentOpenAPI/QQApiInterface.h>
+#import <TencentOpenAPI/TencentOAuth.h>
+#import "WXApi.h"
+#import "WeiboSDK.h"
+#import "Macro.h"
+#import "NetworksRequest.h"
+#import "NSString+Extension.h"
+#import "XTSideMenu.h"
+#import "SVProgressHUD.h"
+#import "LoginService.h"
 
 @interface AppDelegate ()
 
@@ -16,7 +27,52 @@
 
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-    // Override point for customization after application launch.
+    
+    //第三方登陆
+    
+    [ShareSDK registerApp:SHARE_APPID];//字符串api20为您的ShareSDK的AppKey
+    
+    [ShareSDK connectWeChatWithAppId:WEIXIN_APP_ID   //微信APPID
+                           appSecret:WEIXIN_APP_SECRECT  //微信APPSecret
+                           wechatCls:[WXApi class]];
+    
+    [ShareSDK connectSinaWeiboWithAppKey:WEIBO_APP_KEY
+                               appSecret:WEIBO_APP_SECRECT
+                             redirectUri:@"http://www.momoda.com"];
+    
+    [ShareSDK connectQZoneWithAppKey:QQ_APP_ID
+                           appSecret:QQ_APP_KEY
+                   qqApiInterfaceCls:[QQApiInterface class]
+                     tencentOAuthCls:[TencentOAuth class]];
+     
+    //
+    
+    __weak AppDelegate *safeSelf = self ;
+    self.loginIsSuccessBlock = ^(BOOL isLoginSuccess ){
+        
+        if (isLoginSuccess) {
+             [safeSelf setCenterViewWithLeftViewWithRightView:isLoginSuccess];
+            
+        }
+        else{
+            UIViewController *ctl = safeSelf.window.rootViewController ;
+            UIStoryboard *mainStoryboard = [UIStoryboard storyboardWithName:@"Main" bundle:nil];
+            UIViewController*loginViewCtl = [mainStoryboard instantiateViewControllerWithIdentifier:@"loginCtl"];
+             loginViewCtl.modalTransitionStyle = UIModalTransitionStyleFlipHorizontal ;
+            [ctl presentViewController:loginViewCtl animated:YES completion:nil];
+
+        }
+
+    };
+    self.autoLoginIsSuccess = ^(BOOL isAutoLoginsuccess){
+            [safeSelf setCenterViewWithLeftViewWithRightView:isAutoLoginsuccess];
+        
+    };
+    
+   // [self autoLogin];
+    
+    [self setCenterViewWithLeftViewWithRightView:YES];
+    
     return YES;
 }
 
@@ -40,6 +96,87 @@
 
 - (void)applicationWillTerminate:(UIApplication *)application {
     // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
+}
+
+#pragma mark-ShareSDK
+- (BOOL)application:(UIApplication *)application
+      handleOpenURL:(NSURL *)url
+{
+    return [ShareSDK handleOpenURL:url
+                        wxDelegate:self];
+}
+
+- (BOOL)application:(UIApplication *)application
+            openURL:(NSURL *)url
+  sourceApplication:(NSString *)sourceApplication
+         annotation:(id)annotation
+{
+    return [ShareSDK handleOpenURL:url
+                 sourceApplication:sourceApplication
+                        annotation:annotation
+                        wxDelegate:self];
+}
+#pragma mark
+#pragma mark-AutoLogin
+- (void)autoLogin
+{
+    
+    //4：qq 5：微信  6：微博 7：淘宝
+    if (USER_NAME  && USER_PASSWORD)
+    {
+        self.loginType = Normal ;
+        [LoginService handleAutoLoginRequest:USER_NAME anduserPassword:USER_PASSWORD andLoginType:@"1" andShareSDkLogin:NO];
+        
+    }
+    else if ([ShareSDK hasAuthorizedWithType:ShareTypeWeixiSession])
+    {
+        self.loginType = weixinLogin ;
+        [LoginService handleAutoLoginRequest:SHARESDK_UID anduserPassword:@" " andLoginType:@"5" andShareSDkLogin:YES];
+    }
+    else if ([ShareSDK hasAuthorizedWithType:ShareTypeSinaWeibo])
+    {
+        self.loginType = weiboLogin;
+        [LoginService handleAutoLoginRequest:SHARESDK_UID anduserPassword:@" " andLoginType:@"6" andShareSDkLogin:YES];
+    }
+    else if ([ShareSDK hasAuthorizedWithType:ShareTypeQQSpace])
+    {
+        self.loginType = QQLogin ;
+        [LoginService handleAutoLoginRequest:SHARESDK_UID anduserPassword:@" " andLoginType:@"4" andShareSDkLogin:YES];
+    }
+    else if ([ShareSDK hasAuthorizedWithType:ShareTypeQQSpace])
+    {
+        self.loginType = taobaoLogin ;
+    }
+    else
+    {
+        [self setCenterViewWithLeftViewWithRightView:NO ];
+    }
+    
+}
+- (void)setCenterViewWithLeftViewWithRightView:(BOOL)isLoginSuccess
+{
+    self.window.backgroundColor = [UIColor whiteColor];
+    if (isLoginSuccess) {
+        
+        UIStoryboard *mainStoryboard = [UIStoryboard storyboardWithName:@"Main" bundle:nil];
+        UIViewController*center = [mainStoryboard instantiateInitialViewController];
+        UIViewController *left = [mainStoryboard instantiateViewControllerWithIdentifier:@"LeftViewCtl"];
+        
+        XTSideMenu *root = [[XTSideMenu alloc] initWithContentViewController:center leftMenuViewController:left rightMenuViewController:nil];
+        root.leftMenuViewVisibleWidth = LEFTCTLWIDTH;
+        self.window.rootViewController = root ;
+        
+    }
+    else{
+        
+        UIStoryboard *mainStoryboard = [UIStoryboard storyboardWithName:@"Main" bundle:nil];
+        UIViewController*loginViewCtl = [mainStoryboard instantiateViewControllerWithIdentifier:@"loginCtl"];
+        self.window.rootViewController = loginViewCtl ;
+        
+    }
+    
+    [SVProgressHUD dismiss];
+    
 }
 
 @end
